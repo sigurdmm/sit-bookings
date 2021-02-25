@@ -50,6 +50,7 @@ def get_booking_schedule():
     print('MERGE BOOKINGS')
     schedule = add_bookings(bookings, schedule)
     update_calendar(schedule)
+    print('CALENDAR UPDATE COMPLETED')
     cached_schedule = json.dumps(schedule)
     print('COMPLETED')
     scraper.close_driver()
@@ -105,21 +106,21 @@ def update_calendar(schedule):
     calender_events = [event for event in calender.get_events()]
 
     booked_activities = []
-    # print('already in calendar:', booking_ids_calender)
     for date in schedule:
         for time in schedule[date]:
             if schedule[date][time]['status'] == 'BOOKED':
                 booked_activities.append({**schedule[date][time], **{'date': date}})
 
-    booked_activity_ids = set([activity['id'] for activity in booked_activities])
+    add_calender_events(calender, booked_activities, calender_events)
+    delete_removed_events(calender, booked_activities, calender_events)
 
-    delete_removed_events(calender, booked_activity_ids, calender_events)
 
+def add_calender_events(calender, booked_activities, calender_events):
     event_descriptions = [event['description'] for event in calender_events if 'description' in event]
 
     for booking in booked_activities:
+        # Dont make calendar event for bookings already in calendar
         if booking['id'] in event_descriptions:
-            print(booking['id'], 'is already in the calendar!')
             continue
 
         calendar_event = {
@@ -129,10 +130,11 @@ def update_calendar(schedule):
             'summary': 'TPM BOOKING',
         }
         calender.create_event(calendar_event)
-        print('ADDED:', calendar_event)
+        print(f'ADDED:{booking["date"]}-{booking["start"]} - ID{booking["id"]}')
 
 
-def delete_removed_events(calendar, booked_activity_ids, calendar_events):
+def delete_removed_events(calendar, booked_activities, calendar_events):
+    booked_activity_ids = set([activity['id'] for activity in booked_activities])
     # contains the calendar event id for activities which is in the calendar, but is not booked anymore.
     deleted_activity_calendar_ids = []
     for event in calendar_events:
