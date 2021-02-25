@@ -1,16 +1,13 @@
 import time, json
 import datetime
 from scraper import Scraper, Studio
+import googlecalendar
 from flask import Flask, request
 
 app = Flask(__name__)
 
-@app.route('/time')
-def get_current_time():
-    return {'time': time.time()}
 
-
-@app.route('/schedule')
+@app.route('/api/schedule')
 def get_booking_schedule():
     scraper = None
 
@@ -30,7 +27,7 @@ def get_booking_schedule():
         f.write(json.dumps(schedule))
         f.close()
 
-    #TODO: fix /21 hardcoding
+    # TODO: fix /21 hardcoding
     dates = [datetime.datetime.strptime(k + '/21', '%d/%m/%y') for (k, v) in schedule.items()]
 
     # if less than 2 weeks is cached, scrape
@@ -52,7 +49,7 @@ def get_booking_schedule():
     bookings = scraper.get_bookings()
     print('MERGE BOOKINGS')
     schedule = add_bookings(bookings, schedule)
-
+    update_calendar(schedule)
     cached_schedule = json.dumps(schedule)
     print('COMPLETED')
     scraper.close_driver()
@@ -62,7 +59,8 @@ def get_booking_schedule():
         'schedule': cached_schedule
     }
 
-@app.route('/book', methods=['POST'])
+
+@app.route('/api/book', methods=['POST'])
 def book_trainings():
     print(request.method)
     phone = request.args.get("phone")
@@ -90,14 +88,66 @@ def book_trainings():
     f.close()
 
     schedule = add_bookings(bookings, schedule)
+    update_calendar(schedule)
     scraper.close_driver()
     return app.response_class(status=200, response=json.dumps(schedule), mimetype='application/json')
 
 
 def add_bookings(bookings, schedule):
-    print(bookings)
     for booking in bookings:
-        print(booking)
         datestamp = f'{booking["day"]}/{booking["month"]}'
         schedule[datestamp][booking['start']]['status'] = 'BOOKED'
     return schedule
+
+
+def update_calendar(schedule):
+    calender = googlecalendar.Calendar()
+    calender_events = [event for event in calender.get_events()]
+
+    booked_activities = []
+    # print('already in calendar:', booking_ids_calender)
+    for date in schedule:
+        for time in schedule[date]:
+            if schedule[date][time]['status'] == 'BOOKED':
+                booked_activities.append({**schedule[date][time], **{'date': date}})
+
+    booked_activity_ids = set([activity['id'] for activity in booked_activities])
+
+    delete_removed_events(calender, booked_activity_ids, calender_events)
+
+    event_descriptions = [event['description'] for event in calender_events if 'description' in event]
+
+    for booking in booked_activities:
+        if booking['id'] in event_descriptions:
+            print(booking['id'], 'is already in the calendar!')
+            continue
+
+        calendar_event = {
+            'start': get_datetime(booking['date'], booking['start']).isoformat(),
+            'end': get_datetime(booking['date'], booking['end']).isoformat(),
+            'description': booking['id'],
+            'summary': 'TPM BOOKING',
+        }
+        calender.create_event(calendar_event)
+        print('ADDED:', calendar_event)
+
+
+def delete_removed_events(calendar, booked_activity_ids, calendar_events):
+    # contains the calendar event id for activities which is in the calendar, but is not booked anymore.
+    deleted_activity_calendar_ids = []
+    for event in calendar_events:
+        if 'description' in event and event['description'] not in booked_activity_ids:
+            deleted_activity_calendar_ids.append(event['id'])
+
+    for eventID in deleted_activity_calendar_ids:
+        calendar.delete_event(eventID)
+        print('deleted, ', eventID)
+
+
+def get_datetime(datestr, timestr):
+    year = 2021
+    month = int(datestr.split('/')[1])
+    day = int(datestr.split('/')[0])
+    hour = int(timestr.split(':')[0])
+    minutes = int(timestr.split(':')[1])
+    return datetime.datetime(year, month, day, hour, minutes)

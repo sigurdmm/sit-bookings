@@ -1,6 +1,5 @@
 import React, {useState, useEffect} from 'react';
 import './App.css';
-import {ReactComponent as ReactLogo} from './reload.svg'
 import Login from "./Login";
 import Calender from "./Calender";
 
@@ -12,7 +11,7 @@ function App() {
 
     const load_schedule = (isHardReset) => {
         setIsLoading(true)
-        fetch(`/schedule?phone=${user.phone}&pwd=${user.pwd}`)
+        fetch(`/api/schedule?phone=${user.phone}&pwd=${user.pwd}`)
             .then(res => res.json())
             .then(data => {
                 setSchedule(JSON.parse(data.schedule));
@@ -37,7 +36,7 @@ function App() {
         console.log(checkbox_ids)
         setIsLoading(true);
 
-        fetch(`/book?phone=${user.phone}&pwd=${user.pwd}`, {
+        fetch(`/api/book?phone=${user.phone}&pwd=${user.pwd}`, {
             method: 'POST', // *GET, POST, PUT, DELETE, etc.
             mode: 'cors', // no-cors, *cors, same-origin
             cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
